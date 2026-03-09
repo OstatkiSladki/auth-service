@@ -1,0 +1,933 @@
+openapi: 3.0.3
+info:
+  title: Auth Service API
+  description: |
+    Сервис аутентификации, авторизации и управления пользователями.
+    
+    ## Безопасность
+    - **Токены хранятся в HttpOnly Cookies** (защищено от XSS-атак)
+    - **Access Token:** Path=/api/v1, Max-Age=1800 (30 минут)
+    - **Refresh Token:** Path=/api/v1/auth/refresh, Max-Age=2592000 (30 дней)
+    - **CSRF Protection:** SameSite=Lax, Secure (HTTPS только)
+    - **CORS:** allow_credentials=True (обязательно для работы с Cookies)
+    
+    ## Ролевая модель
+    - user: Базовый пользователь
+    - staff: Сотрудник заведения
+    - manager: Менеджер заведения (может управлять сотрудниками)
+    - admin: Администратор заведения (полный доступ)
+  version: 1.2.0
+  contact:
+    name: Development Team
+    email: dev@company.com
+
+servers:
+  - url: https://api.company.com/auth
+    description: Production Server
+  - url: http://localhost:8000/auth
+    description: Local Development Server
+
+tags:
+  - name: Authentication
+    description: Операции входа, регистрации и управления сессиями
+  - name: User Profile
+    description: Управление профилем текущего пользователя
+  - name: Staff Management
+    description: Управление сотрудниками площадки (доступно менеджерам/админам)
+
+security:
+  - CookieAuth: []
+
+paths:
+  # ==============================
+  # AUTHENTICATION
+  # ==============================
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Регистрация нового пользователя
+      description: |
+        Создает нового пользователя и устанавливает токены аутентификации в Cookies.
+        Требуется подтверждение privacy policy.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь успешно зарегистрирован
+          headers:
+            Set-Cookie:
+              description: Access и Refresh токены установлены в HttpOnly Cookies
+              schema:
+                type: string
+                example: "access_token=eyJhbGciOiJIUzI1NiIs...; HttpOnly; Secure; SameSite=Lax; Path=/api/v1; Max-Age=1800"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '409':
+          description: Email или телефон уже зарегистрированы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Вход в систему
+      description: |
+        Аутентификация пользователя по email и паролю.
+        Устанавливает Access и Refresh токены в HttpOnly Cookies.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          headers:
+            Set-Cookie:
+              description: Access и Refresh токены установлены в HttpOnly Cookies
+              schema:
+                type: string
+                example: "access_token=eyJhbGciOiJIUzI1NiIs...; HttpOnly; Secure; SameSite=Lax; Path=/api/v1; Max-Age=1800"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '423':
+          description: Аккаунт заблокирован или не подтвержден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Обновление Access токена
+      description: |
+        Refresh токен автоматически извлекается из HttpOnly Cookie.
+        Выдает новый Access Token с обновленным сроком действия.
+      security: []
+      requestBody:
+        required: false
+      responses:
+        '200':
+          description: Access токен успешно обновлен
+          headers:
+            Set-Cookie:
+              description: Новый Access Token установлен в Cookie
+              schema:
+                type: string
+                example: "access_token=eyJhbGciOiJIUzI1NiIs...; HttpOnly; Secure; SameSite=Lax; Path=/api/v1; Max-Age=1800"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Refresh токен недействителен, отозван или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          description: Пользователь не активен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Выход из системы
+      description: |
+        Отзыв Refresh токена в базе данных и очистка всех Cookies.
+      responses:
+        '200':
+          description: Успешный выход
+          headers:
+            Set-Cookie:
+              description: Cookies очищены (Max-Age=0)
+              schema:
+                type: string
+                example: "access_token=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1; Max-Age=0"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/auth/password/reset-request:
+    post:
+      tags:
+        - Authentication
+      summary: Запрос сброса пароля
+      description: |
+        Генерирует JWT-токен для сброса пароля и отправляет инструкцию на email.
+        Токен действителен 15 минут.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '200':
+          description: Инструкция отправлена на email (всегда 200 для безопасности)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Ошибка валидации email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/auth/password/reset:
+    post:
+      tags:
+        - Authentication
+      summary: Сброс пароля
+      description: |
+        Установка нового пароля по токену из письма.
+        Токен передается в теле запроса.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+      responses:
+        '200':
+          description: Пароль успешно изменен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Токен недействителен или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '422':
+          description: Ошибка валидации нового пароля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/auth/email/verify:
+    post:
+      tags:
+        - Authentication
+      summary: Подтверждение Email
+      description: |
+        Активация аккаунта по токену из письма верификации.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerifyRequest'
+      responses:
+        '200':
+          description: Email успешно подтвержден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Токен недействителен или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ==============================
+  # USER PROFILE
+  # ==============================
+  /api/v1/users/me:
+    get:
+      tags:
+        - User Profile
+      summary: Получить мой профиль
+      description: |
+        Возвращает полную информацию о профиле текущего пользователя.
+        Токены аутентификации автоматически извлекаются из Cookies.
+      responses:
+        '200':
+          description: Данные профиля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    patch:
+      tags:
+        - User Profile
+      summary: Обновить мой профиль
+      description: |
+        Обновляет информацию профиля текущего пользователя.
+        Все поля необязательны, передаются только изменяемые.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserProfileRequest'
+      responses:
+        '200':
+          description: Профиль успешно обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '401':
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/users/search:
+    get:
+      tags:
+        - User Profile
+      summary: Поиск пользователя по Email
+      description: |
+        Используется менеджером для поиска пользователя перед добавлением в сотрудники.
+        Возвращает минимальную публичную информацию (id, name, avatar).
+      parameters:
+        - in: query
+          name: email
+          required: true
+          schema:
+            type: string
+            format: email
+          description: Email пользователя для поиска
+          example: "user@example.com"
+      responses:
+        '200':
+          description: Пользователь найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileShort'
+        '404':
+          description: Пользователь не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '401':
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ==============================
+  # STAFF MANAGEMENT
+  # ==============================
+  /api/v1/venues/{venue_id}/staff:
+    post:
+      tags:
+        - Staff Management
+      summary: Добавить сотрудника в заведение
+      description: |
+        Создает профиль сотрудника для указанного пользователя.
+        Доступно только менеджерам и администраторам этого заведения.
+        Требуется явное указание email пользователя.
+      parameters:
+        - in: path
+          name: venue_id
+          required: true
+          schema:
+            type: integer
+            example: 5
+          description: ID заведения
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddStaffMemberRequest'
+      responses:
+        '201':
+          description: Сотрудник успешно добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffProfileResponse'
+        '400':
+          description: Пользователь не найден или уже является сотрудником
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '401':
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          description: Нет прав на управление этим заведением
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '404':
+          description: Пользователь с таким email не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    get:
+      tags:
+        - Staff Management
+      summary: Список сотрудников площадки
+      description: |
+        Возвращает список всех сотрудников указанного заведения.
+        Доступно только менеджерам и администраторам этого заведения.
+      parameters:
+        - in: path
+          name: venue_id
+          required: true
+          schema:
+            type: integer
+            example: 5
+          description: ID заведения
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Номер страницы
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+            minimum: 1
+          description: Количество записей на странице
+      responses:
+        '200':
+          description: Список сотрудников
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffListResponse'
+        '401':
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          description: Нет доступа к этой площадке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/v1/staff/{profile_id}:
+    get:
+      tags:
+        - Staff Management
+      summary: Профиль конкретного сотрудника
+      description: |
+        Возвращает детальную информацию о профиле сотрудника.
+        Доступно менеджерам/админам заведения или самому сотруднику.
+      parameters:
+        - in: path
+          name: profile_id
+          required: true
+          schema:
+            type: integer
+            example: 123
+          description: ID профиля сотрудника
+      responses:
+        '200':
+          description: Данные сотрудника
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffProfileResponse'
+        '403':
+          description: Нет доступа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '404':
+          description: Профиль не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    patch:
+      tags:
+        - Staff Management
+      summary: Редактирование сотрудника
+      description: |
+        Изменение роли или статуса сотрудника.
+        Доступно только менеджерам и администраторам заведения.
+      parameters:
+        - in: path
+          name: profile_id
+          required: true
+          schema:
+            type: integer
+            example: 123
+          description: ID профиля сотрудника
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffProfileRequest'
+      responses:
+        '200':
+          description: Данные успешно обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffProfileResponse'
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          description: Нет доступа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '404':
+          description: Профиль не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    delete:
+      tags:
+        - Staff Management
+      summary: Удаление сотрудника
+      description: |
+        Отвязка пользователя от заведения (не удаляет пользователя из системы).
+        Доступно только менеджерам и администраторам заведения.
+      parameters:
+        - in: path
+          name: profile_id
+          required: true
+          schema:
+            type: integer
+            example: 123
+          description: ID профиля сотрудника
+      responses:
+        '204':
+          description: Сотрудник успешно удален
+        '403':
+          description: Нет доступа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '404':
+          description: Профиль не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+components:
+  securitySchemes:
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: "Access Token хранится в HttpOnly Cookie (Path=/api/v1)"
+
+  schemas:
+    # ==============================
+    # REQUEST SCHEMAS
+    # ==============================
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - first_name
+        - privacy_policy_accepted
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+          description: Уникальный email пользователя
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          example: "SecurePass123!"
+          description: Пароль (мин. 8 символов)
+        phone:
+          type: string
+          maxLength: 20
+          example: "+79990000000"
+          description: Номер телефона (опционально)
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Иван"
+          description: Имя
+        last_name:
+          type: string
+          maxLength: 100
+          example: "Иванов"
+          description: Фамилия (опционально)
+        privacy_policy_accepted:
+          type: boolean
+          example: true
+          description: Подтверждение принятия политики конфиденциальности
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          example: "SecurePass123!"
+
+    PasswordResetRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+
+    PasswordResetConfirm:
+      type: object
+      required:
+        - token
+        - new_password
+      properties:
+        token:
+          type: string
+          description: JWT-токен из письма для сброса пароля
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          example: "NewSecurePass456!"
+          description: Новый пароль
+
+    EmailVerifyRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: JWT-токен из письма верификации
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    UpdateUserProfileRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Иван"
+        last_name:
+          type: string
+          maxLength: 100
+          example: "Иванов"
+        avatar_url:
+          type: string
+          format: uri
+          example: "https://cdn.company.com/avatars/123.jpg"
+        phone:
+          type: string
+          maxLength: 20
+          example: "+79990000000"
+        default_address:
+          type: string
+          example: "г. Москва, ул. Примерная, д. 1"
+        preferences_json:
+          type: object
+          description: Пользовательские предпочтения в формате JSON
+          example:
+            language: "ru"
+            timezone: "Europe/Moscow"
+            notifications:
+              email: true
+              sms: false
+
+    CreateMyStaffRequest:
+      type: object
+      required:
+        - venue_id
+      properties:
+        venue_id:
+          type: integer
+          minimum: 1
+          example: 5
+          description: ID заведения, куда пользователь хочет устроиться
+
+    AddStaffMemberRequest:
+      type: object
+      required:
+        - user_email
+        - role
+      properties:
+        user_email:
+          type: string
+          format: email
+          example: "newstaff@example.com"
+          description: Email пользователя, которого нужно добавить в сотрудники
+        role:
+          type: string
+          enum:
+            - staff
+            - manager
+            - admin
+          default: staff
+          description: Роль сотрудника в заведении
+
+    UpdateStaffProfileRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - staff
+            - manager
+            - admin
+          description: Новая роль сотрудника
+        is_active:
+          type: boolean
+          description: Статус доступа сотрудника (true = активен, false = заблокирован)
+
+    # ==============================
+    # RESPONSE SCHEMAS
+    # ==============================
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Success"
+        detail:
+          type: string
+          example: "Операция выполнена успешно"
+
+    UserProfileResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 123
+          description: Уникальный ID пользователя
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        phone:
+          type: string
+          nullable: true
+          example: "+79990000000"
+        first_name:
+          type: string
+          example: "Иван"
+        last_name:
+          type: string
+          nullable: true
+          example: "Иванов"
+        avatar_url:
+          type: string
+          nullable: true
+          format: uri
+          example: "https://cdn.company.com/avatars/123.jpg"
+        is_verified:
+          type: boolean
+          example: false
+          description: Подтвержден ли email
+        is_active:
+          type: boolean
+          example: true
+          description: Активен ли аккаунт
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        staff_profile:
+          $ref: '#/components/schemas/StaffProfileResponse'
+          nullable: true
+          description: Профиль сотрудника (если пользователь является сотрудником)
+
+    UserProfileShort:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 123
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        first_name:
+          type: string
+          example: "Иван"
+        last_name:
+          type: string
+          nullable: true
+          example: "Иванов"
+        avatar_url:
+          type: string
+          nullable: true
+          format: uri
+          example: "https://cdn.company.com/avatars/123.jpg"
+
+    StaffProfileResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 456
+          description: ID профиля сотрудника
+        user_id:
+          type: integer
+          example: 123
+          description: ID пользователя
+        venue_id:
+          type: integer
+          example: 5
+          description: ID заведения
+        role:
+          type: string
+          enum:
+            - staff
+            - manager
+            - admin
+          example: "staff"
+          description: Роль сотрудника
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        user:
+          $ref: '#/components/schemas/UserProfileShort'
+          nullable: true
+          description: Информация о пользователе (вложена для удобства)
+
+    StaffListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffProfileResponse'
+          description: Массив профилей сотрудников
+        total:
+          type: integer
+          example: 50
+          description: Общее количество записей
+        page:
+          type: integer
+          example: 1
+          description: Текущая страница
+        limit:
+          type: integer
+          example: 20
+          description: Записей на странице
+
+    ErrorDetail:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "validation_error"
+          description: Код ошибки
+        message:
+          type: string
+          example: "Неверный формат email"
+          description: Человекочитаемое описание ошибки
+        details:
+          type: object
+          nullable: true
+          description: Дополнительные детали ошибки
+          example:
+            field: "email"
+            reason: "Invalid format"
