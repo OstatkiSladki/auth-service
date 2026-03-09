@@ -407,7 +407,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StaffProfileResponse'
+                $ref: '#/components/schemas/StaffMemberResponse'
         '400':
           description: Пользователь не найден или уже является сотрудником
           content:
@@ -438,7 +438,7 @@ paths:
         - Staff Management
       summary: Список сотрудников площадки
       description: |
-        Возвращает список всех сотрудников указанного заведения.
+        Возвращает список всех сотрудников указанного заведения с поддержкой пагинации, фильтрации и сортировки.
         Доступно только менеджерам и администраторам этого заведения.
       parameters:
         - in: path
@@ -455,7 +455,7 @@ paths:
             type: integer
             default: 1
             minimum: 1
-          description: Номер страницы
+          description: Страница для пагинации
         - in: query
           name: limit
           required: false
@@ -465,13 +465,28 @@ paths:
             maximum: 100
             minimum: 1
           description: Количество записей на странице
+        - in: query
+          name: role
+          required: false
+          schema:
+            type: string
+            enum: [staff, manager, admin, owner]
+          description: Фильтр по роли сотрудника
+        - in: query
+          name: sort_by
+          required: false
+          schema:
+            type: string
+            default: '-created_at'
+            enum: [created_at, -created_at, first_name, -first_name, last_name, -last_name, role, -role, email, -email]
+          description: Сортировка (- для обратного порядка)
       responses:
         '200':
-          description: Список сотрудников
+          description: Список сотрудников с метаданными пагинации
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StaffListResponse'
+                $ref: '#/components/schemas/StaffListPaginatedResponse'
         '401':
           description: Неавторизован
           content:
@@ -491,7 +506,7 @@ paths:
         - Staff Management
       summary: Профиль конкретного сотрудника
       description: |
-        Возвращает детальную информацию о профиле сотрудника.
+        Возвращает детальную информацию о профиле сотрудника с полная информация о пользователе.
         Доступно менеджерам/админам заведения или самому сотруднику.
       parameters:
         - in: path
@@ -503,11 +518,11 @@ paths:
           description: ID профиля сотрудника
       responses:
         '200':
-          description: Данные сотрудника
+          description: Данные сотрудника с информацией о пользователе
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StaffProfileResponse'
+                $ref: '#/components/schemas/StaffMemberResponse'
         '403':
           description: Нет доступа
           content:
@@ -544,11 +559,11 @@ paths:
               $ref: '#/components/schemas/UpdateStaffProfileRequest'
       responses:
         '200':
-          description: Данные успешно обновлены
+          description: Данные сотрудника успешно обновлены
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StaffProfileResponse'
+                $ref: '#/components/schemas/StaffMemberResponse'
         '400':
           description: Ошибка валидации данных
           content:
@@ -900,6 +915,82 @@ components:
           items:
             $ref: '#/components/schemas/StaffProfileResponse'
           description: Массив профилей сотрудников
+
+    StaffMemberResponse:
+      type: object
+      description: Полная информация о сотруднике (пользователь + профиль сотрудника)
+      properties:
+        id:
+          type: integer
+          example: 456
+          description: ID профиля сотрудника
+        user_id:
+          type: integer
+          example: 123
+          description: ID пользователя
+        venue_id:
+          type: integer
+          example: 5
+          description: ID заведения
+        role:
+          type: string
+          enum:
+            - staff
+            - manager
+            - admin
+            - owner
+          example: "manager"
+          description: Роль сотрудника в рамках заведения
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+          description: Дата назначения сотрудником
+        user:
+          type: object
+          description: Полная информация о пользователе
+          properties:
+            id:
+              type: integer
+              example: 123
+            email:
+              type: string
+              format: email
+              example: "user@example.com"
+            phone:
+              type: string
+              nullable: true
+              example: "+79990000000"
+            first_name:
+              type: string
+              example: "Иван"
+            last_name:
+              type: string
+              nullable: true
+              example: "Иванов"
+            avatar_url:
+              type: string
+              nullable: true
+              format: uri
+              example: "https://cdn.company.com/avatars/123.jpg"
+            role:
+              type: string
+              enum:
+                - user
+                - staff
+                - admin
+              example: "staff"
+              description: Роль пользователя в системе
+
+    StaffListPaginatedResponse:
+      type: object
+      description: Список сотрудников с метаданными пагинации
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffMemberResponse'
+          description: Массив сотрудников с полной информацией
         total:
           type: integer
           example: 50
@@ -911,7 +1002,11 @@ components:
         limit:
           type: integer
           example: 20
-          description: Записей на странице
+          description: Количество записей на странице
+        pages:
+          type: integer
+          example: 3
+          description: Общее количество страниц
 
     ErrorDetail:
       type: object
