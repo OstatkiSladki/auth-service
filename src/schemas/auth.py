@@ -1,9 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional
 
 
 class RegisterRequest(BaseModel):
-  email: str
+  email: EmailStr
   password: str = Field(..., min_length=8)
   first_name: str
   last_name: Optional[str] = None
@@ -12,12 +12,12 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-  email: str
+  email: EmailStr
   password: str
 
 
 class PasswordResetRequest(BaseModel):
-  email: str
+  email: EmailStr
 
 
 class PasswordResetConfirm(BaseModel):
