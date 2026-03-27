@@ -11,6 +11,7 @@ class Settings(BaseSettings):
   ENVIRONMENT: str = "development"
   PORT: int = 8000
   HOST: str = "0.0.0.0"
+  APP_ROOT_PATH: str = ""
 
   # Database
   POSTGRES_HOST: str

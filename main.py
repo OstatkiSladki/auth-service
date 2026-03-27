@@ -8,6 +8,7 @@ from src.api import api_router
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+    root_path=settings.APP_ROOT_PATH,
 )
 
 # CORS configuration
