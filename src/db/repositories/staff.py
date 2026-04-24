@@ -1,9 +1,8 @@
 from typing import Optional, Sequence
-from sqlalchemy import select, func, desc, asc
+from sqlalchemy import delete, select, func, desc, asc
 from sqlalchemy.orm import joinedload, contains_eager
 from src.db.repositories.base import BaseRepository
 from src.db.models.staff import StaffProfile
-from src.db.models.enums import StaffRole
 from src.db.models.user import User
 
 
@@ -86,3 +85,9 @@ class StaffProfileRepository(BaseRepository[StaffProfile]):
 
     result = await self.session.execute(query)
     return result.scalars().all(), total
+
+  async def delete_by_venue_id(self, venue_id: int) -> int:
+    result = await self.session.execute(
+      delete(self.model).where(self.model.venue_id == venue_id)
+    )
+    return int(result.rowcount or 0)

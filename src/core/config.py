@@ -1,7 +1,4 @@
-import json
-from typing import List, Union
-
-from pydantic import field_validator, computed_field
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +8,14 @@ class Settings(BaseSettings):
   ENVIRONMENT: str = "development"
   PORT: int = 8000
   HOST: str = "0.0.0.0"
+  GRPC_HOST: str = "0.0.0.0"
+  GRPC_PORT: int = 50053
+  GRPC_VENUE_SERVICE_HOST: str = "venue-service"
+  GRPC_VENUE_SERVICE_PORT: int = 50052
+  GRPC_STARTUP_CHECK_TIMEOUT: float = 5.0
+  GRPC_CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 5
+  GRPC_CIRCUIT_BREAKER_RESET_TIMEOUT: float = 30.0
+  GRPC_STARTUP_CHECKS_ENABLED: bool = True
   APP_ROOT_PATH: str = ""
 
   # Database
@@ -38,6 +43,7 @@ class Settings(BaseSettings):
     env_file=".env",
     env_file_encoding="utf-8",
     case_sensitive=True,
+    extra="ignore",
   )
 
   # @field_validator("CORS_ORIGINS")

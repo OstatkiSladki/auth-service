@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package ostatki.grpc.v1;
+
+service AuthIdentityService {
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc GetUserById(GetUserByIdRequest) returns (GetUserByIdResponse);
+  rpc CheckUserExists(CheckUserExistsRequest) returns (CheckUserExistsResponse);
+  rpc RevokeStaffAccess(RevokeStaffAccessRequest) returns (RevokeStaffAccessResponse);
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool is_valid = 1;
+  int64 user_id = 2;
+  string role = 3;
+  bool is_active = 4;
+  bool is_verified = 5;
+}
+
+message GetUserByIdRequest {
+  int64 user_id = 1;
+}
+
+message GetUserByIdResponse {
+  int64 user_id = 1;
+  string email = 2;
+  string role = 3;
+  bool is_active = 4;
+  bool is_verified = 5;
+}
+
+message CheckUserExistsRequest {
+  int64 user_id = 1;
+}
+
+message CheckUserExistsResponse {
+  bool exists = 1;
+}
+
+message RevokeStaffAccessRequest {
+  int64 venue_id = 1;
+  string reason = 2;
+}
+
+message RevokeStaffAccessResponse {
+  int32 revoked_count = 1;
+}

@@ -9,6 +9,7 @@ from src.db.repositories.staff import StaffProfileRepository
 from src.services.auth import AuthService
 from src.services.user import UserService
 from src.services.staff import StaffService
+from src.grpc.client import VenueDirectoryClient
 import jwt
 
 
@@ -38,10 +39,12 @@ async def get_user_service(
 
 
 async def get_staff_service(
+  request: Request,
   staff_repo: StaffProfileRepository = Depends(get_staff_repo),
   user_repo: UserRepository = Depends(get_user_repo),
 ) -> StaffService:
-  return StaffService(staff_repo, user_repo)
+  venue_client: VenueDirectoryClient = request.app.state.venue_directory_client
+  return StaffService(staff_repo, user_repo, venue_client)
 
 
 def get_current_user_token(request: Request) -> TokenPayload:

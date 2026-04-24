@@ -10,17 +10,34 @@ from src.schemas.staff import (
   StaffListPaginatedResponse,
   StaffFilterParams,
 )
+from src.grpc.client import VenueDirectoryClient, VenueServiceUnavailableError
 
 
 class StaffService:
-  def __init__(self, staff_repo: StaffProfileRepository, user_repo: UserRepository):
+  def __init__(
+    self,
+    staff_repo: StaffProfileRepository,
+    user_repo: UserRepository,
+    venue_client: VenueDirectoryClient,
+  ):
     self.staff_repo = staff_repo
     self.user_repo = user_repo
+    self.venue_client = venue_client
 
   async def add_staff_member(
     self, venue_id: int, user_email: str, role: StaffRole
   ) -> StaffMemberResponse:
-    # TODO: gRPC Call to Venue Service to CheckVenueExists
+    try:
+      venue_exists = await self.venue_client.check_venue_exists(venue_id)
+    except VenueServiceUnavailableError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Venue service is unavailable",
+      ) from exc
+    if not venue_exists:
+      raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Venue not found"
+      )
 
     user = await self.user_repo.get_by_email(user_email)
     if not user:
