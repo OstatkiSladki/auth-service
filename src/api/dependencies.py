@@ -47,6 +47,20 @@ async def get_staff_service(
   return StaffService(staff_repo, user_repo, venue_client)
 
 
+def get_bearer_token(request: Request) -> str:
+  auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+  if not auth_header:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header"
+    )
+  parts = auth_header.split(None, 1)
+  if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Authorization header"
+    )
+  return parts[1].strip()
+
+
 def get_current_user_token(request: Request) -> TokenPayload:
   token = request.cookies.get("access_token")
   if not token:

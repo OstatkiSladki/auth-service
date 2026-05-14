@@ -1,3 +1,4 @@
+import jwt
 from fastapi import APIRouter, Depends, Response, Request
 from src.schemas.auth import (
   RegisterRequest,
@@ -5,12 +6,20 @@ from src.schemas.auth import (
   PasswordResetRequest,
   PasswordResetConfirm,
   EmailVerifyRequest,
+  IntrospectResponse,
 )
 from src.schemas.common import MessageResponse
 from src.schemas.user import UserProfileResponse
 from src.services.auth import AuthService
-from src.api.dependencies import get_auth_service, get_current_user_token
+from src.api.dependencies import (
+  get_auth_service,
+  get_bearer_token,
+  get_current_user_token,
+  get_user_repo,
+)
 from src.core.config import settings
+from src.core.security import decode_token
+from src.db.repositories.user import UserRepository
 from src.api.v1.auth.utils import _set_cookies
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -75,6 +84,51 @@ async def logout(
   response.delete_cookie(key="access_token", path="/api/v1")
   response.delete_cookie(key="refresh_token", path="/api/v1/auth/refresh")
   return MessageResponse(message="Logged out")
+
+
+@router.post("/introspect", response_model=IntrospectResponse, status_code=200)
+async def introspect(
+  token: str = Depends(get_bearer_token),
+  user_repo: UserRepository = Depends(get_user_repo),
+):
+  try:
+    payload = decode_token(token)
+  except jwt.ExpiredSignatureError:
+    return IntrospectResponse(valid=False, error_code="expired")
+  except jwt.InvalidTokenError:
+    return IntrospectResponse(valid=False, error_code="invalid")
+
+  if payload.get("type") != "access":
+    return IntrospectResponse(valid=False, error_code="wrong_type")
+
+  sub = payload.get("sub")
+  if not sub:
+    return IntrospectResponse(valid=False, error_code="invalid")
+
+  try:
+    user_id = int(sub)
+  except (TypeError, ValueError):
+    return IntrospectResponse(valid=False, error_code="invalid")
+
+  user = await user_repo.get_user_with_staff_profile(user_id)
+  if user is None or user.deleted_at is not None:
+    return IntrospectResponse(valid=False, error_code="user_not_found")
+
+  if not user.is_active:
+    return IntrospectResponse(valid=False, error_code="inactive")
+
+  venue_id = user.staff_profile.venue_id if user.staff_profile else None
+
+  return IntrospectResponse(
+    valid=True,
+    user_id=user.id,
+    email=user.email,
+    role=user.role.value if hasattr(user.role, "value") else user.role,
+    is_active=user.is_active,
+    is_verified=user.is_verified,
+    venue_id=venue_id,
+    exp=payload.get("exp"),
+  )
 
 
 @router.post("/password/reset-request", response_model=MessageResponse)

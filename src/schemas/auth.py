@@ -27,3 +27,15 @@ class PasswordResetConfirm(BaseModel):
 
 class EmailVerifyRequest(BaseModel):
   token: str
+
+
+class IntrospectResponse(BaseModel):
+  valid: bool
+  user_id: Optional[int] = None
+  email: Optional[EmailStr] = None
+  role: Optional[str] = None
+  is_active: Optional[bool] = None
+  is_verified: Optional[bool] = None
+  venue_id: Optional[int] = None
+  exp: Optional[int] = None
+  error_code: Optional[str] = None

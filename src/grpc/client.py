@@ -84,12 +84,14 @@ class VenueDirectoryClient:
     *,
     host: str,
     port: int,
-    timeout: float,
+    startup_timeout: float,
+    call_timeout: float,
     failure_threshold: int,
     reset_timeout: float,
   ) -> None:
     self._target = f"{host}:{port}"
-    self._timeout = timeout
+    self._startup_timeout = startup_timeout
+    self._call_timeout = call_timeout
     self._breaker = _CircuitBreaker(failure_threshold, reset_timeout)
     self._channel = grpc.aio.insecure_channel(self._target, options=_CHANNEL_OPTIONS)
     self._stub = venue_directory_pb2_grpc.VenueDirectoryServiceStub(self._channel)
@@ -100,7 +102,8 @@ class VenueDirectoryClient:
     return cls(
       host=settings.GRPC_VENUE_SERVICE_HOST,
       port=settings.GRPC_VENUE_SERVICE_PORT,
-      timeout=settings.GRPC_STARTUP_CHECK_TIMEOUT,
+      startup_timeout=settings.GRPC_STARTUP_CHECK_TIMEOUT,
+      call_timeout=settings.GRPC_CALL_TIMEOUT,
       failure_threshold=settings.GRPC_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
       reset_timeout=settings.GRPC_CIRCUIT_BREAKER_RESET_TIMEOUT,
     )
@@ -112,7 +115,7 @@ class VenueDirectoryClient:
     try:
       response = await self._health_stub.Check(
         health_pb2.HealthCheckRequest(service=_SERVICE_NAME),
-        timeout=self._timeout,
+        timeout=self._startup_timeout,
         wait_for_ready=True,
       )
     except grpc.RpcError as exc:
@@ -126,7 +129,7 @@ class VenueDirectoryClient:
     try:
       response = await self._stub.CheckVenueExists(
         venue_directory_pb2.CheckVenueExistsRequest(venue_id=venue_id),
-        timeout=self._timeout,
+        timeout=self._call_timeout,
         wait_for_ready=True,
       )
     except grpc.RpcError as exc:

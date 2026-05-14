@@ -136,7 +136,6 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "grpcio" },
     { name = "grpcio-health-checking" },
-    { name = "grpcio-tools" },
     { name = "protobuf" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
@@ -146,6 +145,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "grpcio-tools" },
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -160,7 +160,6 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.135.1" },
     { name = "grpcio", specifier = ">=1.78.0" },
     { name = "grpcio-health-checking", specifier = ">=1.78.0" },
-    { name = "grpcio-tools", specifier = ">=1.78.0" },
     { name = "protobuf", specifier = ">=6.33.0" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "pyjwt", specifier = ">=2.11.0" },
@@ -170,6 +169,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "grpcio-tools", specifier = ">=1.78.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },

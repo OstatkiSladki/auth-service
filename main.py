@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -9,13 +10,24 @@ from src.core.config import settings
 from src.grpc import start_grpc_server, stop_grpc_server
 from src.grpc.client import VenueDirectoryClient
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     venue_client = VenueDirectoryClient.from_settings()
     app.state.venue_directory_client = venue_client
-    if settings.GRPC_STARTUP_CHECKS_ENABLED:
-        await venue_client.wait_until_serving()
+
     grpc_server, grpc_health = await start_grpc_server()
+
+    if settings.GRPC_STARTUP_CHECKS_ENABLED:
+        try:
+            await venue_client.wait_until_serving()
+        except Exception as exc:
+            logger.warning(
+                "gRPC startup health check failed for venue-directory: %s; continuing with lazy reconnect",
+                exc,
+            )
     app.state.grpc_server = grpc_server
     app.state.grpc_health = grpc_health
     try:
